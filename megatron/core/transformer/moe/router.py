@@ -75,6 +75,11 @@ class Router(ABC, MegatronModule):
         self.weight.data = self.weight.data.to(dtype=self.config.params_dtype)
         setattr(self.weight, 'sequence_parallel', self.config.sequence_parallel)
         if self.bias is not None:
+            # self.bias was allocated with torch.empty and is never touched by
+            # init_method (which only initializes self.weight). Leaving it as
+            # uninitialized memory lets stray NaN/Inf bit patterns leak into the
+            # gating logits (hardware/allocation dependent), so zero it here.
+            self.bias.data.zero_()
             self.bias.data = self.bias.data.to(dtype=self.config.params_dtype)
             setattr(self.bias, 'sequence_parallel', self.config.sequence_parallel)
 
