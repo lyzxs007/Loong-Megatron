@@ -1331,12 +1331,17 @@ class TEGroupedMLP(MegatronModule):
                 output, name="moe_act", forced_released_tensors=[fc1_output]
             )
             
-        # upad and concat the output
-        if need_fp8_padding and not use_hybrid_ep_dispatcher:
-            output = self.fp8_unpadding(output, actual_tokens_per_expert)
-
+        # Apply the expert bias while tensors are still FP8-padded, so that
+        # `output`, `tokens_per_expert` and `permuted_probs` (all padded above)
+        # stay consistent. Doing this after unpadding splits an unpadded tensor
+        # by padded per-expert sizes and crashes.
         output = self._apply_bias(output, output_bias, tokens_per_expert, permuted_probs)
         output_bias = None
+
+        # unpad and concat the output
+        if need_fp8_padding:
+            output = self.fp8_unpadding(output, actual_tokens_per_expert)
+
         if self.config.moe_received_token_capacity is not None:
             output = torch.cat(
                 [
